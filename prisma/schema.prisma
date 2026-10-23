@@ -1,0 +1,158 @@
+// Prisma Schema for Soroban Watchdog
+// Production-grade PostgreSQL schema for telemetry, rules, and alerting
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Network {
+  TESTNET
+  MAINNET
+}
+
+enum Severity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum ChannelType {
+  DISCORD
+  TELEGRAM
+  WEBHOOK
+}
+
+enum DeliveryStatus {
+  PENDING
+  DELIVERED
+  FAILED
+}
+
+model Contract {
+  id              String           @id // Soroban Contract Address 'C...'
+  name            String
+  network         Network          @default(TESTNET)
+  active          Boolean          @default(true)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  events          Event[]
+  ingestionStates IngestionState[]
+  rules           Rule[]
+  alerts          Alert[]
+
+  @@index([network, active])
+}
+
+model IngestionState {
+  id                 String   @id @default(uuid())
+  contractId         String   @unique
+  cursor             String?  // RPC pagination cursor
+  lastLedgerSequence BigInt   @default(0)
+  updatedAt          DateTime @updatedAt
+
+  contract           Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+}
+
+model Event {
+  id             String   @id // Formatted as '{ledgerSequence}-{transactionIndex}-{eventIndex}'
+  contractId     String
+  type           String   // contract, system, or diagnostic
+  ledger         BigInt
+  ledgerClosedAt DateTime
+  txHash         String
+  topics         Json     // Array of decoded strings/values
+  data           Json     // Decoded event payload
+  rawXdr         String   @db.Text
+  createdAt      DateTime @default(now())
+
+  contract       Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  alerts         Alert[]
+
+  @@index([contractId, ledgerClosedAt(sort: Desc)])
+  @@index([contractId, ledger(sort: Desc)])
+  @@index([txHash])
+}
+
+model Rule {
+  id           String        @id @default(uuid())
+  contractId   String
+  name         String
+  detectorType String        // e.g., 'LARGE_VALUE_TRANSFER', 'RAPID_DRAIN', 'EMERGENCY_PAUSE'
+  severity     Severity      @default(MEDIUM)
+  parameters   Json          // { "threshold": "10000000000", "windowMinutes": 5 }
+  enabled      Boolean       @default(true)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  contract     Contract      @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  channels     RuleChannel[]
+  alerts       Alert[]
+
+  @@index([contractId, enabled])
+}
+
+model Channel {
+  id          String        @id @default(uuid())
+  name        String
+  type        ChannelType
+  destination String        // AES-256 encrypted URL or chat ID
+  secret      String?       // AES-256 encrypted HMAC signing secret or token
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  rules       RuleChannel[]
+  deliveries  AlertDelivery[]
+}
+
+model RuleChannel {
+  ruleId    String
+  channelId String
+
+  rule      Rule    @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  channel   Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+
+  @@id([ruleId, channelId])
+}
+
+model Alert {
+  id         String          @id @default(uuid())
+  ruleId     String
+  contractId String
+  eventId    String?
+  severity   Severity
+  title      String
+  message    String          @db.Text
+  metadata   Json
+  createdAt  DateTime        @default(now())
+
+  rule       Rule            @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  contract   Contract        @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  event      Event?          @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  deliveries AlertDelivery[]
+
+  @@index([contractId, createdAt(sort: Desc)])
+  @@index([ruleId])
+}
+
+model AlertDelivery {
+  id        String         @id @default(uuid())
+  alertId   String
+  channelId String
+  status    DeliveryStatus @default(PENDING)
+  attempts  Int            @default(0)
+  lastError String?        @db.Text
+  sentAt    DateTime?
+  createdAt DateTime       @default(now())
+
+  alert     Alert          @relation(fields: [alertId], references: [id], onDelete: Cascade)
+  channel   Channel        @relation(fields: [channelId], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt])
+}
