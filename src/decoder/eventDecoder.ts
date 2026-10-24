@@ -318,9 +318,21 @@ export function decodeSorobanEvent(
     ? new Date(metadata.ledgerClosedAt)
     : new Date();
 
+  let normalizedContractId = '';
+  if (rpcEvent.contractId) {
+    normalizedContractId =
+      typeof rpcEvent.contractId === 'string'
+        ? rpcEvent.contractId
+        : typeof (rpcEvent.contractId as any).contractId === 'function'
+        ? (rpcEvent.contractId as any).contractId()
+        : (rpcEvent.contractId as any).toString();
+  } else if (metadata?.contractId) {
+    normalizedContractId = metadata.contractId;
+  }
+
   return {
     id: rpcEvent.id ?? metadata?.id ?? `${ledger}-0-0`,
-    contractId: rpcEvent.contractId ?? metadata?.contractId ?? '',
+    contractId: normalizedContractId,
     type: normalizeEventType(rpcEvent.type ?? metadata?.type),
     ledger,
     ledgerClosedAt,
