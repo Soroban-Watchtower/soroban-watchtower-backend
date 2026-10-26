@@ -34,6 +34,12 @@ enum DeliveryStatus {
   FAILED
 }
 
+enum FailedEventStatus {
+  PENDING
+  RESOLVED
+  DISCARDED
+}
+
 model Contract {
   id              String           @id // Soroban Contract Address 'C...'
   name            String
@@ -44,6 +50,7 @@ model Contract {
 
   events          Event[]
   ingestionStates IngestionState[]
+  failedEvents    FailedEvent[]
   rules           Rule[]
   alerts          Alert[]
 
@@ -55,9 +62,29 @@ model IngestionState {
   contractId         String   @unique
   cursor             String?  // RPC pagination cursor
   lastLedgerSequence BigInt   @default(0)
+  chainLedger        BigInt   @default(0) // Upstream chain head ledger for lag calculation
+  lastEventId        String?  // Idempotency marker to prevent replay duplicates
   updatedAt          DateTime @updatedAt
 
   contract           Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+}
+
+model FailedEvent {
+  id          String            @id @default(uuid())
+  contractId  String
+  eventId     String?
+  eventType   String?
+  rawPayload  Json
+  errorLog    String            @db.Text
+  retryCount  Int               @default(0)
+  status      FailedEventStatus @default(PENDING)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  contract    Contract          @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  @@index([contractId, status])
+  @@index([status, createdAt])
 }
 
 model Event {

@@ -3,7 +3,16 @@ import { prisma } from '../db/client.js';
 import { decodeSorobanEvent } from '../decoder/eventDecoder.js';
 import { CursorManager, createCursorManager } from './cursorManager.js';
 import { SorobanRpcClient, createRpcClient } from './rpcClient.js';
+import { FailedEventManager, createFailedEventManager } from './failedEventManager.js';
 import { DecodedSorobanEvent } from '../types/index.js';
+import {
+  pollerLagLedgers,
+  pollerChainLedger,
+  pollerLastLedger,
+  pollerTicksTotal,
+  pollerTickDuration,
+  eventsIngestedTotal,
+} from '../observability/metrics.js';
 
 // Default known Stellar Testnet USDC / SAC contract
 export const DEFAULT_TESTNET_USDC = 'CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC';
@@ -15,6 +24,7 @@ export interface PollerOptions {
   startLedgerOffset?: number;
   rpcClient?: SorobanRpcClient;
   cursorManager?: CursorManager;
+  failedEventManager?: FailedEventManager;
   onEventsPersisted?: (contractId: string, events: DecodedSorobanEvent[]) => Promise<void> | void;
 }
 
@@ -23,6 +33,8 @@ export interface PollResult {
   eventsFetched: number;
   newCursor: string | null;
   lastLedger: bigint;
+  chainLedger: bigint;
+  lag: bigint;
   hasMore: boolean;
 }
 
@@ -33,6 +45,7 @@ export interface PollResult {
 export class IngestionPoller {
   private readonly rpcClient: SorobanRpcClient;
   private readonly cursorManager: CursorManager;
+  private readonly failedEventManager: FailedEventManager;
   private readonly contractIds: string[];
   private readonly pollIntervalMs: number;
   private readonly batchSize: number;
@@ -48,6 +61,7 @@ export class IngestionPoller {
   constructor(options: PollerOptions = {}) {
     this.rpcClient = options.rpcClient || createRpcClient();
     this.cursorManager = options.cursorManager || createCursorManager();
+    this.failedEventManager = options.failedEventManager || createFailedEventManager();
     this.contractIds =
       options.contractIds && options.contractIds.length > 0
         ? options.contractIds
@@ -69,6 +83,7 @@ export class IngestionPoller {
    * 5. Returns PollResult indicating if full page was returned (hasMore = true).
    */
   public async pollContract(contractId: string): Promise<PollResult> {
+    const startTime = performance.now();
     const cursorState = await this.cursorManager.getCursor(contractId);
 
     let getEventsParams: Parameters<SorobanRpcClient['getEvents']>[0];
@@ -92,14 +107,28 @@ export class IngestionPoller {
 
     const rpcResponse = await this.rpcClient.getEvents(getEventsParams);
     const rawEvents = rpcResponse.events || [];
+    const chainLedger = BigInt(rpcResponse.latestLedger || 0);
 
-    // Decode all events into strongly-typed domain model
-    const decodedEvents = rawEvents.map((rawEvt) =>
-      decodeSorobanEvent(rawEvt as any, { contractId })
-    );
+    // Decode all events into strongly-typed domain model, quarantining malformed events
+    const decodedEvents: DecodedSorobanEvent[] = [];
+    for (const rawEvt of rawEvents) {
+      try {
+        const decoded = decodeSorobanEvent(rawEvt as any, { contractId });
+        decodedEvents.push(decoded);
+        eventsIngestedTotal.inc({ contract_id: contractId, event_type: decoded.type });
+      } catch (decodeErr: any) {
+        await this.failedEventManager.recordFailedEvent({
+          contractId,
+          eventId: (rawEvt as any)?.id,
+          eventType: 'unknown',
+          rawPayload: rawEvt,
+          error: decodeErr,
+        });
+      }
+    }
 
     let newCursor = cursorState?.cursor ?? null;
-    let lastLedger = BigInt(rpcResponse.latestLedger || 0);
+    let lastLedger = chainLedger;
 
     if (decodedEvents.length > 0) {
       const lastRawEvent = rawEvents[rawEvents.length - 1];
@@ -112,7 +141,9 @@ export class IngestionPoller {
         contractId,
         decodedEvents,
         newCursor,
-        lastLedger
+        lastLedger,
+        chainLedger,
+        newCursor
       );
 
       if (this.onEventsPersisted) {
@@ -124,8 +155,19 @@ export class IngestionPoller {
       }
     } else {
       // Advance last ledger sequence even when no new events match the filter
-      await this.cursorManager.updateCursorOnly(contractId, newCursor, lastLedger);
+      await this.cursorManager.updateCursorOnly(contractId, newCursor, lastLedger, chainLedger);
     }
+
+    const lag = chainLedger > lastLedger ? chainLedger - lastLedger : 0n;
+
+    // Update Prometheus Observability Metrics
+    pollerChainLedger.set(Number(chainLedger), { network: 'TESTNET' });
+    pollerLastLedger.set(Number(lastLedger), { contract_id: contractId });
+    pollerLagLedgers.set(Number(lag), { contract_id: contractId });
+    pollerTicksTotal.inc({ status: decodedEvents.length > 0 ? 'success' : 'empty' });
+
+    const durationSeconds = (performance.now() - startTime) / 1000;
+    pollerTickDuration.observe(durationSeconds);
 
     const hasMore = rawEvents.length >= this.batchSize;
 
@@ -134,6 +176,8 @@ export class IngestionPoller {
       eventsFetched: decodedEvents.length,
       newCursor,
       lastLedger,
+      chainLedger,
+      lag,
       hasMore,
     };
   }

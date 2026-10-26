@@ -76,10 +76,12 @@ describe('CursorManager & Persistence Layer', () => {
       const manager = new CursorManager(mockPrisma);
       const result = await manager.getCursor('CA3D5...');
 
-      expect(result).toEqual({
-        cursor: '000123-0-0',
-        lastLedgerSequence: 5000000n,
-      });
+      expect(result).toEqual(
+        expect.objectContaining({
+          cursor: '000123-0-0',
+          lastLedgerSequence: 5000000n,
+        })
+      );
     });
   });
 
@@ -181,11 +183,11 @@ describe('CursorManager & Persistence Layer', () => {
           cursor: '005000-0-0',
           lastLedgerSequence: 5000n,
         }),
-        create: {
+        create: expect.objectContaining({
           contractId: 'C_USDC_1',
           cursor: '005000-0-0',
           lastLedgerSequence: 5000n,
-        },
+        }),
       });
     });
   });

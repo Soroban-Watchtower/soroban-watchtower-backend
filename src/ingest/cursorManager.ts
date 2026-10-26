@@ -5,6 +5,17 @@ import { DecodedSorobanEvent } from '../types/index.js';
 export interface CursorState {
   cursor: string | null;
   lastLedgerSequence: bigint;
+  chainLedger?: bigint;
+  lastEventId?: string | null;
+  lag?: bigint;
+}
+
+export interface LagInfo {
+  contractId: string;
+  lastLedger: bigint;
+  chainLedger: bigint;
+  lag: bigint;
+  isSynced: boolean;
 }
 
 export interface LedgerGapResult {
@@ -62,9 +73,37 @@ export class CursorManager {
       return null;
     }
 
+    const chainLedger = record.chainLedger ?? 0n;
+    const lastLedger = record.lastLedgerSequence ?? 0n;
+    const lag = chainLedger > lastLedger ? chainLedger - lastLedger : 0n;
+
     return {
       cursor: record.cursor,
-      lastLedgerSequence: record.lastLedgerSequence,
+      lastLedgerSequence: lastLedger,
+      chainLedger,
+      lastEventId: record.lastEventId ?? null,
+      lag,
+    };
+  }
+
+  /**
+   * Calculates the real-time ingestion lag between the upstream chain head and the contract's applied ledger.
+   */
+  public async getLag(contractId: string): Promise<LagInfo | null> {
+    const state = await this.getCursor(contractId);
+    if (!state) {
+      return null;
+    }
+    const chainLedger = state.chainLedger ?? 0n;
+    const lastLedger = state.lastLedgerSequence ?? 0n;
+    const lag = chainLedger > lastLedger ? chainLedger - lastLedger : 0n;
+
+    return {
+      contractId,
+      lastLedger,
+      chainLedger,
+      lag,
+      isSynced: lag <= 1n,
     };
   }
 
@@ -101,14 +140,16 @@ export class CursorManager {
    * Invariants:
    * 1. Contract record is upserted to ensure foreign key integrity.
    * 2. Events are written using `createMany` with `skipDuplicates: true` to prevent duplicate failures.
-   * 3. IngestionState is upserted with the new cursor and latest ledger sequence.
+   * 3. IngestionState is upserted with the new cursor, latest ledger sequence, chainLedger, and lastEventId.
    * 4. Executed inside a single Prisma interactive transaction.
    */
   public async saveEventsAndCursor(
     contractId: string,
     events: DecodedSorobanEvent[],
     cursor: string | null,
-    lastLedgerSequence: bigint
+    lastLedgerSequence: bigint,
+    chainLedger?: bigint,
+    lastEventId?: string | null
   ): Promise<void> {
     const formattedEvents = events.map((event) => ({
       id: event.id,
@@ -121,6 +162,9 @@ export class CursorManager {
       data: serializeBigIntForJson(event.data),
       rawXdr: event.rawXdr,
     }));
+
+    const resolvedLastEventId =
+      lastEventId ?? (events.length > 0 ? events[events.length - 1].id : null);
 
     await this.prisma.$transaction(async (tx) => {
       // 1. Ensure the parent Contract entity exists so foreign key constraints pass
@@ -149,12 +193,16 @@ export class CursorManager {
         update: {
           cursor,
           lastLedgerSequence,
+          chainLedger: chainLedger ?? lastLedgerSequence,
+          lastEventId: resolvedLastEventId,
           updatedAt: new Date(),
         },
         create: {
           contractId,
           cursor,
           lastLedgerSequence,
+          chainLedger: chainLedger ?? lastLedgerSequence,
+          lastEventId: resolvedLastEventId,
         },
       });
     });
@@ -166,7 +214,8 @@ export class CursorManager {
   public async updateCursorOnly(
     contractId: string,
     cursor: string | null,
-    lastLedgerSequence: bigint
+    lastLedgerSequence: bigint,
+    chainLedger?: bigint
   ): Promise<IngestionState> {
     return this.prisma.$transaction(async (tx) => {
       await tx.contract.upsert({
@@ -185,12 +234,14 @@ export class CursorManager {
         update: {
           cursor,
           lastLedgerSequence,
+          chainLedger: chainLedger ?? lastLedgerSequence,
           updatedAt: new Date(),
         },
         create: {
           contractId,
           cursor,
           lastLedgerSequence,
+          chainLedger: chainLedger ?? lastLedgerSequence,
         },
       });
     });

@@ -61,7 +61,9 @@ describe('IngestionPoller Workflow', () => {
         }),
       ]),
       '004950-0-0',
-      4950n
+      4950n,
+      5000n,
+      '004950-0-0'
     );
 
     expect(onPersisted).toHaveBeenCalledTimes(1);
@@ -119,7 +121,9 @@ describe('IngestionPoller Workflow', () => {
       'C_CONTRACT',
       expect.any(Array),
       '005100-0-0',
-      5100n
+      5100n,
+      5200n,
+      '005100-0-0'
     );
 
     expect(result.newCursor).toBe('005100-0-0');
@@ -188,7 +192,7 @@ describe('IngestionPoller Workflow', () => {
     const result = await poller.pollContract('C_CONTRACT');
 
     expect(mockCursorManager.saveEventsAndCursor).not.toHaveBeenCalled();
-    expect(mockCursorManager.updateCursorOnly).toHaveBeenCalledWith('C_CONTRACT', 'curr-cursor', 5500n);
+    expect(mockCursorManager.updateCursorOnly).toHaveBeenCalledWith('C_CONTRACT', 'curr-cursor', 5500n, 5500n);
     expect(result.eventsFetched).toBe(0);
     expect(result.hasMore).toBe(false);
   });

@@ -33,6 +33,30 @@ services:
       timeout: 5s
       retries: 5
 
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: soroban-watchdog-app
+    restart: on-failure
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      DATABASE_URL: postgresql://postgres:postgrespassword@postgres:5432/soroban_watchdog?schema=public
+      REDIS_URL: redis://redis:6379
+      SOROBAN_RPC_URL: https://soroban-testnet.stellar.org
+      ENCRYPTION_KEY: fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210
+      POLL_INTERVAL_MS: 5000
+      MAX_EVENTS_PER_BATCH: 100
+      LOG_LEVEL: info
+    ports:
+      - "4000:4000"
+
 volumes:
   pgdata:
   redisdata:
