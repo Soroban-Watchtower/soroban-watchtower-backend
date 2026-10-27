@@ -13,6 +13,7 @@ To prevent repository rejection:
 - [x] **No LLM Slop**: High-quality architecture, strict type definitions, full error handling, unit/integration test scaffolds, and clear documentation.
 - [x] **Security-First**: Outgoing webhook SSRF protection, secret encryption at rest, and strict Zod input validation.
 - [x] **Zero-Hassle Local Setup**: Single-command startup via `docker-compose` and `.env.example`.
+- [x] **End-to-End Simulation & Testnet Run (Step 10)**: Automated test script (`npm run simulate`) verifying live Testnet RPC querying, contract registration, XDR decoding, threat surveillance, and BullMQ cryptographic dispatch.
 
 ---
 

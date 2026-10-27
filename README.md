@@ -370,6 +370,12 @@ npm run test:coverage
 # Perform TypeScript static type check
 npm run lint
 
+# Step 10: Run End-to-End Simulation & Live Testnet Run
+npm run simulate
+
+# Send simulation alert to custom Discord webhook or Webhook.site
+npm run simulate -- --webhook="https://discord.com/api/webhooks/<channel-id>/<token>"
+
 # Verify end-to-end alert dispatch via verification tool
 npx tsx src/notifiers/verifyDispatch.ts
 ```
@@ -403,6 +409,7 @@ soroban-watchtower-backend/
 │   └── API_SPEC.md               # REST API payload contracts
 ├── src/
 │   ├── index.ts                  # Unified dual-engine single-process bootstrap
+│   ├── simulate.ts               # Step 10: End-to-End simulation & live Testnet runner
 │   ├── config/                   # Zod environment validation and typed config
 │   ├── db/                       # Prisma client singleton and AES-256-GCM encryption
 │   ├── decoder/                  # Binary XDR ScVal parser & BigInt safe arithmetic

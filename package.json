@@ -12,6 +12,7 @@
     "start": "node dist/index.js",
     "replay-failed-events": "tsx src/ingest/replay.ts",
     "prune-failed-events": "tsx src/ingest/prune.ts",
+    "simulate": "tsx src/simulate.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
