@@ -18,6 +18,7 @@ import { channelRoutes } from './routes/channels.js';
 import { alertRoutes } from './routes/alerts.js';
 import { telemetryRoutes } from './routes/telemetry.js';
 import { failedEventRoutes } from './routes/failedEvents.js';
+import { eventRoutes } from './routes/events.js';
 
 export interface ServerOptions {
   enableLogging?: boolean;
@@ -73,6 +74,7 @@ export async function buildServer(options: ServerOptions = {}): Promise<FastifyI
         { name: 'Channels', description: 'Notification destinations (Discord, Telegram, Webhook)' },
         { name: 'Alerts', description: 'Triggered security alerts and delivery logs' },
         { name: 'Telemetry', description: 'Zero-chain-roundtrip contract telemetry & frequency metrics' },
+        { name: 'Events', description: 'Historical contract telemetry events and decoded logs' },
         { name: 'FailedEvents', description: 'Dead-letter quarantine inspection and recovery' },
       ],
     },
@@ -140,6 +142,7 @@ export async function buildServer(options: ServerOptions = {}): Promise<FastifyI
   await fastify.register(channelRoutes);
   await fastify.register(alertRoutes);
   await fastify.register(telemetryRoutes);
+  await fastify.register(eventRoutes);
   await fastify.register(failedEventRoutes);
 
   return fastify;

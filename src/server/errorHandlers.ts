@@ -96,7 +96,23 @@ export function handleFastifyError(
     return;
   }
 
-  // 5. Default Internal Server Error
+  // 5. Prisma Foreign Key Constraint (P2003)
+  if ((error as any).code === 'P2003') {
+    const field = (error as any).meta?.field_name || 'referenced resource';
+    const response: ProblemDetails = {
+      type: 'https://soroban-watchdog.io/errors/invalid-reference',
+      title: 'Invalid Foreign Key Reference',
+      status: 400,
+      detail: `The referenced entity does not exist (${field}).`,
+      instance,
+      timestamp,
+    };
+
+    reply.status(400).header('Content-Type', 'application/problem+json').send(response);
+    return;
+  }
+
+  // 6. Default Internal Server Error
   const statusCode = (error as any).statusCode && (error as any).statusCode >= 400 ? (error as any).statusCode : 500;
 
   logger.error(
