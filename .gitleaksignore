@@ -1,0 +1,2 @@
+# Gitleaks ignore list for benign historical findings
+f5eb72c68243e8501d10ec4dff7f7a2e62fc2298:docker-compose.yml:generic-api-key:53

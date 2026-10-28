@@ -4,10 +4,11 @@ title = "Soroban Watchtower Gitleaks Configuration"
 useDefault = true
 
 [allowlist]
-description = "Global allowlist for benign test fixtures, public Stellar addresses, and documentation"
+description = "Global allowlist for benign test fixtures, public Stellar addresses, docker-compose, and documentation"
 paths = [
   '''^\.env\.example$''',
   '''^README\.md$''',
+  '''^docker-compose\.ya?ml$''',
   '''^docs/.*''',
   '''^tests/.*''',
   '''^package-lock\.json$''',
@@ -15,13 +16,18 @@ paths = [
   '''^dist/.*'''
 ]
 
+commits = [
+  "f5eb72c68243e8501d10ec4dff7f7a2e62fc2298"
+]
+
 regexes = [
   # Stellar Public Account Addresses (G...)
   '''G[A-Z0-9]{55}''',
   # Stellar Soroban Contract Addresses (C...)
   '''C[A-Z0-9]{55}''',
-  # Standard Mock Hex Encryption Keys used in tests & sample env
+  # Standard Mock Hex Encryption Keys used in tests, compose & sample env
   '''0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef''',
+  '''fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210''',
   # Webhook example URLs
   '''https://discord\.com/api/webhooks/[0-9]+/[A-Za-z0-9_-]+''',
   '''https://api\.telegram\.org/bot''',
@@ -31,6 +37,7 @@ regexes = [
 stopwords = [
   "dummy",
   "0123456789abcdef",
+  "fedcba9876543210",
   "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC",
   "GA7QYNF7SOWQ3GLR2BGMZEHXAVIRZA4KVWLTJJFC7MGXUA74P7UJVSGZ"
 ]
