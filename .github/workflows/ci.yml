@@ -1,0 +1,103 @@
+name: CI / CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - "feature/*"
+      - "feat/*"
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # =========================================================================
+  # Job 1: Security & Credential Scanning (Gitleaks)
+  # =========================================================================
+  security-audit:
+    name: 1. Security & Credential Scanning
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Codebase (Full History)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Gitleaks
+        run: |
+          GITLEAKS_VERSION="8.18.4"
+          curl -sSL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" | tar -xz -C /usr/local/bin gitleaks
+          chmod +x /usr/local/bin/gitleaks
+
+      - name: Run Gitleaks Secret Detection
+        run: |
+          gitleaks detect --config=.gitleaks.toml --verbose --redact
+
+  # =========================================================================
+  # Job 2: Backend API (Prisma, Typecheck, Unit & Integration Tests)
+  # =========================================================================
+  backend-api:
+    name: 2. Backend Engine (Node ${{ matrix.node-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [20.x, 22.x]
+    env:
+      NODE_ENV: test
+      DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/soroban_watchtower_test"
+      REDIS_URL: "redis://localhost:6379"
+      SOROBAN_RPC_URL: "https://soroban-testnet.stellar.org"
+      ENCRYPTION_KEY: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      PORT: 4000
+    steps:
+      - name: Checkout Codebase
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: "npm"
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Generate Prisma Client
+        run: npx prisma generate
+
+      - name: Static Typecheck (TypeScript Strict)
+        run: npm run typecheck
+
+      - name: Run Test Suite (Vitest)
+        run: npm test
+
+      - name: Production TypeScript Build
+        run: npm run build
+
+  # =========================================================================
+  # Job 3: Docker Container Build Verification
+  # =========================================================================
+  container-build:
+    name: 3. Production Docker Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Codebase
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Production Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: false
+          tags: soroban-watchtower-backend:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

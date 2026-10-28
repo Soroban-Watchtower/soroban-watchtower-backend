@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json.schemastore.org/funding.json",
+  "project": "soroban-watchtower-backend",
+  "description": "Telemetry, anomaly surveillance, and exploit-alerting engine for Stellar Soroban smart contracts",
+  "ecosystem": "Stellar / Soroban",
+  "grants": [
+    {
+      "program": "Drips Wave",
+      "status": "Ready for Review",
+      "specification": "docs/DRIPS_WAVE_ROADMAP.md",
+      "url": "https://drips.network"
+    },
+    {
+      "program": "Stellar Community Fund (SCF)",
+      "status": "Application Track",
+      "category": "Developer Tooling & Infrastructure",
+      "url": "https://communityfund.stellar.org"
+    }
+  ],
+  "maintainers": [
+    {
+      "name": "Soroban Watchtower Core Team",
+      "github": "Soroban-Watchtower",
+      "stellar_address": "GA7QYNF7SOWQ3GLR2BGMZEHXAVIRZA4KVWLTJJFC7MGXUA74P7UJVSGZ"
+    }
+  ],
+  "links": {
+    "roadmap": "docs/DRIPS_WAVE_ROADMAP.md",
+    "architecture": "docs/ARCHITECTURE.md",
+    "threat_model": "docs/failure-modes.md",
+    "api_spec": "docs/API_SPEC.md",
+    "issue_backlog": "https://github.com/Soroban-Watchtower/soroban-watchtower-backend/issues"
+  }
+}

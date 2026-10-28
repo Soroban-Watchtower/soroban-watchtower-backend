@@ -1,0 +1,36 @@
+# See https://pre-commit.com for more information
+# See https://pre-commit.com/hooks.html for more hooks
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+        args: [--allow-multiple-documents]
+      - id: check-json
+      - id: check-added-large-files
+        args: ['--maxkb=500']
+      - id: mixed-line-ending
+        args: ['--fix=lf']
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.18.4
+    hooks:
+      - id: gitleaks
+
+  - repo: local
+    hooks:
+      - id: typecheck
+        name: TypeScript Strict Typecheck
+        entry: npm run typecheck
+        language: system
+        pass_filenames: false
+        files: \.(ts|tsx)$
+
+      - id: unit-tests
+        name: Vitest Fast Test Pass
+        entry: npm test
+        language: system
+        pass_filenames: false
+        files: \.(ts|tsx)$
