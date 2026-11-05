@@ -28,3 +28,4 @@ export class ContractEventEmitter extends EventEmitter {
 
 // Global contract event bus singleton
 export const contractEvents = new ContractEventEmitter();
+
