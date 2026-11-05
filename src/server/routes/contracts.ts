@@ -2,6 +2,7 @@ import { FastifyInstance, FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import { prisma } from '../../db/client.js';
 import { createCursorManager } from '../../ingest/cursorManager.js';
+import { contractEvents } from '../../ingest/contractEvents.js';
 
 const registerContractSchema = z.object({
   id: z.string().min(56).max(56).regex(/^C[A-Z0-9]{55}$/, 'Must be a valid Soroban contract address starting with C'),
@@ -61,6 +62,13 @@ export const contractRoutes: FastifyPluginAsync = async (fastify: FastifyInstanc
       },
     });
 
+    contractEvents.emitContractRegistered({
+      id: contract.id,
+      name: contract.name,
+      network: contract.network,
+      active: contract.active,
+    });
+
     return reply.status(201).send({ data: contract });
   });
 
@@ -112,6 +120,12 @@ export const contractRoutes: FastifyPluginAsync = async (fastify: FastifyInstanc
       data: body,
     });
 
+    contractEvents.emitContractUpdated({
+      id: updated.id,
+      name: updated.name,
+      active: updated.active,
+    });
+
     return { data: updated };
   });
 
@@ -119,6 +133,7 @@ export const contractRoutes: FastifyPluginAsync = async (fastify: FastifyInstanc
   fastify.delete('/api/v1/contracts/:id', async (request, reply) => {
     const { id } = request.params as { id: string };
     await prisma.contract.delete({ where: { id } });
+    contractEvents.emitContractDeleted(id);
     return reply.status(204).send();
   });
 };

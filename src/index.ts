@@ -48,6 +48,10 @@ export async function bootstrap(): Promise<void> {
 
   // 3. Initialize & Start Ingestion Poller
   const poller = createPoller({
+    prismaClient: prisma,
+    dynamicSync: true,
+    shardCount: 2,
+    batchChunkSize: 5,
     onEventsPersisted: async (contractId, events) => {
       for (const event of events) {
         try {

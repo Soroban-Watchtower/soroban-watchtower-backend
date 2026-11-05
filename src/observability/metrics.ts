@@ -267,6 +267,17 @@ export const pollerTicksTotal = metrics.registerCounter({
   labelNames: ['status'],
 });
 
+export const pollerBatchesTotal = metrics.registerCounter({
+  name: 'soroban_poller_batches_total',
+  help: 'Total count of multi-contract RPC batch calls executed',
+  labelNames: ['shard_id', 'status'],
+});
+
+export const pollerMonitoredContracts = metrics.registerGauge({
+  name: 'soroban_poller_monitored_contracts_total',
+  help: 'Total count of smart contracts actively monitored across all poller shards',
+});
+
 export const pollerTickDuration = metrics.registerHistogram({
   name: 'soroban_poller_tick_duration_seconds',
   help: 'Duration of poller ingestion tick in seconds',
