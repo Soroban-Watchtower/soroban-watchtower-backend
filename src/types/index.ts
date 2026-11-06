@@ -23,14 +23,17 @@ export interface DecodedSorobanEvent {
   rawXdr: string;
 }
 
+export interface EventHistoryProvider {
+  getEventsInWindow(contractId: string, windowSeconds: number): Promise<DecodedSorobanEvent[]>;
+  getAggregateVolume(contractId: string, windowSeconds: number, topic?: string): Promise<bigint>;
+  getFailedEventCountInWindow?(contractId: string, windowSeconds: number): Promise<number>;
+}
+
 export interface DetectorContext {
   event: DecodedSorobanEvent;
   ruleParameters: Record<string, any>;
   // For windowed detectors, repository interface to query historical events
-  eventHistoryProvider?: {
-    getEventsInWindow(contractId: string, windowSeconds: number): Promise<DecodedSorobanEvent[]>;
-    getAggregateVolume(contractId: string, windowSeconds: number, topic: string): Promise<bigint>;
-  };
+  eventHistoryProvider?: EventHistoryProvider;
 }
 
 export interface DetectionResult {

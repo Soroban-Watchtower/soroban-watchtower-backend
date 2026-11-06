@@ -2,7 +2,7 @@ import { buildServer } from './server/server.js';
 import { createPoller } from './ingest/poller.js';
 import { createAlertWorker } from './queue/alertWorker.js';
 import { createDefaultNotifierRegistry } from './notifiers/index.js';
-import { createDetectorRunner } from './detectors/detectorRunner.js';
+import { createDetectorRunner, DatabaseEventHistoryProvider } from './detectors/index.js';
 import { createAlertQueue } from './queue/alertQueue.js';
 import { config } from './config/env.js';
 import { logger } from './observability/logger.js';
@@ -37,7 +37,10 @@ export async function bootstrap(): Promise<void> {
 
   // 2. Initialize Queue and Detector Subsystems
   const alertQueue = createAlertQueue();
+  const eventHistoryProvider = new DatabaseEventHistoryProvider(prisma);
   const detectorRunner = createDetectorRunner({
+    prismaClient: prisma,
+    eventHistoryProvider,
     onAlert: async (alertPayload) => {
       await alertQueue.enqueueAlert({
         alertId: alertPayload.alertId,

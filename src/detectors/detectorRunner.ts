@@ -11,6 +11,8 @@ import {
 } from '../types/index.js';
 import { LargeTransferDetector } from './LargeTransferDetector.js';
 import { EmergencyPauseDetector } from './EmergencyPauseDetector.js';
+import { RapidDrainDetector } from './RapidDrainDetector.js';
+import { FailedTxBurstDetector } from './FailedTxBurstDetector.js';
 
 /**
  * Standard rule definition matching the domain and database schema.
@@ -118,6 +120,22 @@ export class DetectorRegistry {
       'EMERGENCY_PAUSE_TRIGGERED',
       'emergency_pause',
       'emergency_pause_triggered',
+    ]);
+    this.register(new RapidDrainDetector(), [
+      'RAPID_DRAIN',
+      'LIQUIDITY_DRAIN',
+      'RAPID_OUTFLOW',
+      'rapid_drain',
+      'liquidity_drain',
+      'rapid_outflow',
+    ]);
+    this.register(new FailedTxBurstDetector(), [
+      'FAILED_TX_BURST',
+      'REVERT_BURST',
+      'EXPLOIT_PROBE',
+      'failed_tx_burst',
+      'revert_burst',
+      'exploit_probe',
     ]);
   }
 
