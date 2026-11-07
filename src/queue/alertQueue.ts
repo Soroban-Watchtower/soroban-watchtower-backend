@@ -1,6 +1,7 @@
 import { Queue, Job, JobsOptions, QueueOptions } from 'bullmq';
 import { config } from '../config/env.js';
 import { AlertPayload, ChannelType } from '../types/index.js';
+import { alertsFannedOutTotal } from '../observability/metrics.js';
 
 export const DEFAULT_ALERT_QUEUE_NAME = 'soroban-alert-queue';
 
@@ -169,6 +170,7 @@ export class AlertQueueProducer {
       };
 
       const job = await this.enqueueAlert(jobData);
+      alertsFannedOutTotal.inc({ channel_type: channel.channelType });
       jobs.push(job);
     }
 

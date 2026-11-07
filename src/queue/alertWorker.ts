@@ -11,6 +11,7 @@ import {
   AlertJobData,
   parseRedisConnection,
 } from './alertQueue.js';
+import { alertDeliveriesTotal } from '../observability/metrics.js';
 
 export type AlertDispatcher = (data: AlertJobData) => Promise<DeliveryResult>;
 
@@ -129,6 +130,11 @@ export class AlertWorkerConsumer {
     if (this.prismaClient && data.channelId) {
       await this.recordDeliveryAttempt(data.alertId, data.channelId, attempt, deliveryResult);
     }
+
+    alertDeliveriesTotal.inc({
+      channel_type: data.channelType || 'SIMULATED',
+      status: deliveryResult.success ? 'delivered' : 'failed',
+    });
 
     // If delivery was not successful, throw an Error to trigger BullMQ's exponential backoff retry
     if (!deliveryResult.success) {

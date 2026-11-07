@@ -26,6 +26,8 @@ enum ChannelType {
   DISCORD
   TELEGRAM
   WEBHOOK
+  SLACK
+  PAGERDUTY
 }
 
 enum DeliveryStatus {

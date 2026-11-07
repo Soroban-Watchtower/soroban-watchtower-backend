@@ -304,6 +304,18 @@ export const alertsTriggeredTotal = metrics.registerCounter({
   labelNames: ['rule_id', 'severity'],
 });
 
+export const alertsSuppressedTotal = metrics.registerCounter({
+  name: 'soroban_alerts_suppressed_total',
+  help: 'Total alerts suppressed or debounced by the cooldown fatigue defense',
+  labelNames: ['rule_id', 'contract_id'],
+});
+
+export const alertsFannedOutTotal = metrics.registerCounter({
+  name: 'soroban_alerts_fanned_out_total',
+  help: 'Total alert delivery jobs created during multi-channel fan-out',
+  labelNames: ['channel_type'],
+});
+
 export const alertDeliveriesTotal = metrics.registerCounter({
   name: 'soroban_alert_deliveries_total',
   help: 'Total alert notifications delivered to external channels',

@@ -1,9 +1,10 @@
 import { buildServer } from './server/server.js';
 import { createPoller } from './ingest/poller.js';
-import { createAlertWorker } from './queue/alertWorker.js';
+import { createAlertWorker, createAlertQueue, createCooldownManager } from './queue/index.js';
 import { createDefaultNotifierRegistry } from './notifiers/index.js';
 import { createDetectorRunner, DatabaseEventHistoryProvider } from './detectors/index.js';
-import { createAlertQueue } from './queue/alertQueue.js';
+import { decrypt } from './db/encryption.js';
+import { ChannelType } from './types/index.js';
 import { config } from './config/env.js';
 import { logger } from './observability/logger.js';
 import { shutdownManager } from './observability/shutdown.js';
@@ -35,17 +36,95 @@ export async function bootstrap(): Promise<void> {
     process.exit(1);
   }
 
-  // 2. Initialize Queue and Detector Subsystems
+  // 2. Initialize Queue, Cooldown, and Detector Subsystems
   const alertQueue = createAlertQueue();
+  const cooldownManager = createCooldownManager();
   const eventHistoryProvider = new DatabaseEventHistoryProvider(prisma);
+
   const detectorRunner = createDetectorRunner({
     prismaClient: prisma,
     eventHistoryProvider,
     onAlert: async (alertPayload) => {
-      await alertQueue.enqueueAlert({
-        alertId: alertPayload.alertId,
-        payload: alertPayload,
-      });
+      // 1. Sliding Cooldown & Deduplication Gate
+      const cooldown = await cooldownManager.shouldDispatch(
+        alertPayload.contractId,
+        alertPayload.ruleId
+      );
+
+      if (!cooldown.shouldDispatch) {
+        logger.warn(
+          {
+            contractId: alertPayload.contractId,
+            ruleId: alertPayload.ruleId,
+            suppressedCount: cooldown.suppressedCount,
+          },
+          '[AlertBridge] Alert throttled by cooldown fatigue defense'
+        );
+        return;
+      }
+
+      // 2. Query configured channels for this rule
+      let ruleChannels: Array<{
+        channel: { id: string; type: any; destination: string; secret: string | null };
+      }> = [];
+
+      try {
+        ruleChannels = await prisma.ruleChannel.findMany({
+          where: { ruleId: alertPayload.ruleId },
+          include: { channel: true },
+        });
+      } catch (dbErr: any) {
+        logger.error(
+          { dbErr, ruleId: alertPayload.ruleId },
+          '[AlertBridge] Failed to fetch channels for rule:'
+        );
+      }
+
+      // 3. Multi-Channel Fan-Out with Credential Decryption
+      if (ruleChannels.length > 0) {
+        const targets = ruleChannels.map((rc) => {
+          let destination = rc.channel.destination;
+          let secret = rc.channel.secret || undefined;
+
+          try {
+            destination = decrypt(rc.channel.destination);
+          } catch {
+            // fallback to plaintext if not encrypted
+          }
+
+          if (secret) {
+            try {
+              secret = decrypt(secret);
+            } catch {
+              // fallback to plaintext
+            }
+          }
+
+          return {
+            channelId: rc.channel.id,
+            channelType: rc.channel.type as ChannelType,
+            destination,
+            secret,
+          };
+        });
+
+        logger.info(
+          { alertId: alertPayload.alertId, channelCount: targets.length },
+          `[AlertBridge] Fanning out alert to ${targets.length} channel(s)`
+        );
+
+        await alertQueue.enqueueAlertForChannels(alertPayload, targets);
+      } else {
+        // Fallback: enqueue default job record if rule has no explicit channels bound
+        logger.info(
+          { alertId: alertPayload.alertId },
+          '[AlertBridge] No external channels bound to rule; enqueueing default delivery record'
+        );
+        await alertQueue.enqueueAlert({
+          alertId: alertPayload.alertId,
+          payload: alertPayload,
+        });
+      }
     },
   });
 

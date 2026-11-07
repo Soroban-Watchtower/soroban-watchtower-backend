@@ -7,7 +7,7 @@ export type Network = 'TESTNET' | 'MAINNET';
 
 export type Severity = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
 
-export type ChannelType = 'DISCORD' | 'TELEGRAM' | 'WEBHOOK';
+export type ChannelType = 'DISCORD' | 'TELEGRAM' | 'WEBHOOK' | 'SLACK' | 'PAGERDUTY';
 
 export type DeliveryStatus = 'PENDING' | 'DELIVERED' | 'FAILED';
 

@@ -312,8 +312,8 @@ describe('Fastify REST API Subsystem (src/server/routes)', () => {
         url: '/api/v1/channels',
         payload: {
           name: 'Invalid Channel',
-          type: 'SLACK', // Not in ['DISCORD', 'TELEGRAM', 'WEBHOOK']
-          destination: 'https://slack.com/hook',
+          type: 'CARRIER_PIGEON', // Not in ['DISCORD', 'TELEGRAM', 'WEBHOOK', 'SLACK', 'PAGERDUTY']
+          destination: 'https://pigeon.com/hook',
         },
       });
 

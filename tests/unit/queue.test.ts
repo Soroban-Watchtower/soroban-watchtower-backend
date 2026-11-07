@@ -11,6 +11,10 @@ import {
   AlertWorkerConsumer,
   AlertWorkerOptions,
 } from '../../src/queue/alertWorker.js';
+import {
+  AlertCooldownManager,
+  createCooldownManager,
+} from '../../src/queue/cooldownManager.js';
 import { AlertPayload, DeliveryResult, NotifierPlugin } from '../../src/types/index.js';
 
 describe('BullMQ Alert Queue & Worker Subsystem (src/queue)', () => {
@@ -407,6 +411,156 @@ describe('BullMQ Alert Queue & Worker Subsystem (src/queue)', () => {
       expect(processedEvents).toHaveLength(1);
       expect(processedEvents[0].payload.title).toBe('Large Transfer Detected');
       expect(processedEvents[0].destination).toBe('https://discord.com/api/webhooks/xyz');
+    });
+  });
+
+  // =========================================================================
+  // 4. AlertCooldownManager (Sliding Cooldown & Deduplication)
+  // =========================================================================
+  describe('4. AlertCooldownManager (Fatigue Defense)', () => {
+    let cooldownManager: AlertCooldownManager;
+
+    beforeEach(() => {
+      cooldownManager = createCooldownManager({
+        defaultCooldownSeconds: 300,
+      });
+      cooldownManager.clear();
+    });
+
+    it('should permit initial alert and activate sliding cooldown', async () => {
+      const contractId = 'C_CONTRACT_ALPHA';
+      const ruleId = 'rule_rapid_drain_01';
+
+      const result = await cooldownManager.shouldDispatch(contractId, ruleId);
+      expect(result.shouldDispatch).toBe(true);
+      expect(result.inCooldown).toBe(false);
+      expect(result.suppressedCount).toBe(0);
+    });
+
+    it('should throttle subsequent duplicate alerts within cooldown window and track suppression count', async () => {
+      const contractId = 'C_CONTRACT_ALPHA';
+      const ruleId = 'rule_rapid_drain_01';
+
+      // 1. Initial trigger -> allowed
+      await cooldownManager.shouldDispatch(contractId, ruleId, 60);
+
+      // 2. Second trigger in window -> suppressed
+      const second = await cooldownManager.shouldDispatch(contractId, ruleId, 60);
+      expect(second.shouldDispatch).toBe(false);
+      expect(second.inCooldown).toBe(true);
+      expect(second.suppressedCount).toBe(1);
+
+      // 3. Third trigger in window -> suppressed, count = 2
+      const third = await cooldownManager.shouldDispatch(contractId, ruleId, 60);
+      expect(third.shouldDispatch).toBe(false);
+      expect(third.inCooldown).toBe(true);
+      expect(third.suppressedCount).toBe(2);
+
+      // Different rule on same contract -> should dispatch independently
+      const diffRule = await cooldownManager.shouldDispatch(contractId, 'rule_pause_02', 60);
+      expect(diffRule.shouldDispatch).toBe(true);
+    });
+
+    it('should immediately permit dispatch when cooldown is reset', async () => {
+      const contractId = 'C_CONTRACT_RESET';
+      const ruleId = 'rule_01';
+
+      await cooldownManager.shouldDispatch(contractId, ruleId, 120);
+      expect((await cooldownManager.shouldDispatch(contractId, ruleId, 120)).shouldDispatch).toBe(false);
+
+      await cooldownManager.resetCooldown(contractId, ruleId);
+      const afterReset = await cooldownManager.shouldDispatch(contractId, ruleId, 120);
+      expect(afterReset.shouldDispatch).toBe(true);
+    });
+
+    it('should bypass cooldown when cooldown duration is configured as 0', async () => {
+      const result = await cooldownManager.shouldDispatch('C_1', 'R_1', 0);
+      expect(result.shouldDispatch).toBe(true);
+      const secondResult = await cooldownManager.shouldDispatch('C_1', 'R_1', 0);
+      expect(secondResult.shouldDispatch).toBe(true);
+    });
+  });
+
+  // =========================================================================
+  // 5. Multi-Channel Fan-Out to SLACK and PAGERDUTY
+  // =========================================================================
+  describe('5. AlertWorkerConsumer Multi-Channel Dispatch (Slack & PagerDuty)', () => {
+    it('should dispatch alert to registered SLACK notifier plugin', async () => {
+      const mockSlackSend = vi.fn().mockResolvedValue({
+        success: true,
+        statusCode: 200,
+        sentAt: new Date(),
+      });
+
+      const notifiers = new Map<any, NotifierPlugin>();
+      notifiers.set('SLACK', {
+        type: 'SLACK',
+        send: mockSlackSend,
+      });
+
+      const consumer = new AlertWorkerConsumer({
+        underlyingWorker: { on: vi.fn(), close: vi.fn() } as any,
+        notifiers,
+      });
+
+      const job: any = {
+        id: 'job-slack-test',
+        attemptsMade: 0,
+        data: {
+          alertId: 'alert-slack-1',
+          channelId: 'ch-slack-1',
+          channelType: 'SLACK',
+          destination: 'https://hooks.slack.com/services/T/B/X',
+          payload: dummyAlertPayload,
+        },
+      };
+
+      const result = await consumer.processJob(job);
+      expect(result.success).toBe(true);
+      expect(mockSlackSend).toHaveBeenCalledWith(
+        dummyAlertPayload,
+        'https://hooks.slack.com/services/T/B/X',
+        undefined
+      );
+    });
+
+    it('should dispatch alert to registered PAGERDUTY notifier plugin', async () => {
+      const mockPdSend = vi.fn().mockResolvedValue({
+        success: true,
+        statusCode: 202,
+        sentAt: new Date(),
+      });
+
+      const notifiers = new Map<any, NotifierPlugin>();
+      notifiers.set('PAGERDUTY', {
+        type: 'PAGERDUTY',
+        send: mockPdSend,
+      });
+
+      const consumer = new AlertWorkerConsumer({
+        underlyingWorker: { on: vi.fn(), close: vi.fn() } as any,
+        notifiers,
+      });
+
+      const job: any = {
+        id: 'job-pd-test',
+        attemptsMade: 0,
+        data: {
+          alertId: 'alert-pd-1',
+          channelId: 'ch-pd-1',
+          channelType: 'PAGERDUTY',
+          destination: 'pd-routing-key-999',
+          payload: dummyAlertPayload,
+        },
+      };
+
+      const result = await consumer.processJob(job);
+      expect(result.success).toBe(true);
+      expect(mockPdSend).toHaveBeenCalledWith(
+        dummyAlertPayload,
+        'pd-routing-key-999',
+        undefined
+      );
     });
   });
 });

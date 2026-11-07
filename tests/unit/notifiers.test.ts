@@ -25,6 +25,14 @@ import {
   TelegramNotifier,
   createTelegramNotifier,
 } from '../../src/notifiers/telegram.js';
+import {
+  SlackNotifier,
+  buildSlackBlockKitPayload,
+} from '../../src/notifiers/slack.js';
+import {
+  PagerDutyNotifier,
+  DEFAULT_PAGERDUTY_EVENTS_URL,
+} from '../../src/notifiers/pagerduty.js';
 import { createDefaultNotifierRegistry } from '../../src/notifiers/index.js';
 import { AlertWorkerConsumer } from '../../src/queue/alertWorker.js';
 import { AlertPayload } from '../../src/types/index.js';
@@ -628,6 +636,175 @@ describe('Notification Dispatchers (src/notifiers)', () => {
       expect(result.success).toBe(true);
       expect(result.statusCode).toBe(200);
       expect(mockFetch).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // =========================================================================
+  // 5. SlackNotifier (Block Kit & Incoming Webhook)
+  // =========================================================================
+  describe('5. SlackNotifier (Block Kit & Webhooks)', () => {
+    it('should format AlertPayload into structured Slack Block Kit blocks', () => {
+      const slackData = buildSlackBlockKitPayload(sampleAlert);
+
+      expect(slackData.text).toContain('[CRITICAL]');
+      expect(slackData.text).toContain('High-Value Drain Detected');
+
+      const headerBlock = slackData.blocks.find((b: any) => b.type === 'header');
+      expect(headerBlock).toBeDefined();
+      expect(headerBlock.text.text).toContain('🚨 [CRITICAL] High-Value Drain Detected');
+
+      const sectionWithFields = slackData.blocks.find(
+        (b: any) => b.type === 'section' && Array.isArray(b.fields)
+      );
+      expect(sectionWithFields).toBeDefined();
+      expect(sectionWithFields.fields.some((f: any) => f.text.includes(sampleAlert.contractId))).toBe(true);
+      expect(sectionWithFields.fields.some((f: any) => f.text.includes(sampleAlert.ruleId))).toBe(true);
+
+      const actionBlock = slackData.blocks.find((b: any) => b.type === 'actions');
+      expect(actionBlock).toBeDefined();
+      expect(actionBlock.elements[0].url).toBe(sampleAlert.explorerUrl);
+    });
+
+    it('should successfully post Block Kit payload to a safe Slack webhook URL', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        text: vi.fn().mockResolvedValue('ok'),
+      });
+
+      const notifier = new SlackNotifier({
+        fetchFn: mockFetch as any,
+        ssrfOptions: {
+          dnsLookup: vi.fn().mockResolvedValue([{ address: '54.230.97.100', family: 4 }]),
+        },
+      });
+
+      const result = await notifier.send(
+        sampleAlert,
+        'https://hooks.slack.com/services/T00/B00/XXXXX'
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.statusCode).toBe(200);
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      const callArgs = mockFetch.mock.calls[0];
+      const parsedBody = JSON.parse(callArgs[1].body);
+      expect(parsedBody.blocks).toBeDefined();
+    });
+
+    it('should block private subnet targets via SSRF validation', async () => {
+      const mockFetch = vi.fn();
+      const notifier = new SlackNotifier({
+        fetchFn: mockFetch as any,
+        ssrfOptions: {
+          dnsLookup: vi.fn().mockResolvedValue([{ address: '127.0.0.1', family: 4 }]),
+        },
+      });
+
+      const result = await notifier.send(sampleAlert, 'https://localhost/services/test');
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('SSRF validation failed');
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it('should return error when Slack webhook destination is empty', async () => {
+      const notifier = new SlackNotifier();
+      const result = await notifier.send(sampleAlert, '');
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('cannot be empty');
+    });
+  });
+
+  // =========================================================================
+  // 6. PagerDutyNotifier (Events API v2 Incident Triggering)
+  // =========================================================================
+  describe('6. PagerDutyNotifier (Events API v2)', () => {
+    it('should dispatch trigger event to PagerDuty Events API v2 with routing key and dedup_key', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 202,
+        text: vi.fn().mockResolvedValue(JSON.stringify({ status: 'success', message: 'Event processed' })),
+      });
+
+      const notifier = new PagerDutyNotifier({
+        fetchFn: mockFetch as any,
+        ssrfOptions: {
+          dnsLookup: vi.fn().mockResolvedValue([{ address: '143.204.98.50', family: 4 }]),
+        },
+      });
+
+      const result = await notifier.send(
+        sampleAlert,
+        'pd_routing_key_sample_32chars_abc123'
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.statusCode).toBe(202);
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+
+      const [url, options] = mockFetch.mock.calls[0];
+      expect(url).toBe(DEFAULT_PAGERDUTY_EVENTS_URL);
+
+      const body = JSON.parse(options.body);
+      expect(body.routing_key).toBe('pd_routing_key_sample_32chars_abc123');
+      expect(body.event_action).toBe('trigger');
+      expect(body.dedup_key).toBe(`soroban-${sampleAlert.contractId}-${sampleAlert.ruleId}`);
+      expect(body.payload.severity).toBe('critical'); // CRITICAL -> critical
+      expect(body.payload.summary).toContain('High-Value Drain Detected');
+      expect(body.links[0].href).toBe(sampleAlert.explorerUrl);
+    });
+
+    it('should support full custom PagerDuty URL with separate secret routing key', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 202,
+        text: vi.fn().mockResolvedValue('{"status":"success"}'),
+      });
+
+      const notifier = new PagerDutyNotifier({
+        fetchFn: mockFetch as any,
+        ssrfOptions: {
+          dnsLookup: vi.fn().mockResolvedValue([{ address: '143.204.98.50', family: 4 }]),
+        },
+      });
+
+      const result = await notifier.send(
+        sampleAlert,
+        'https://custom-pd-relay.company.com/v2/enqueue',
+        'pd_secret_key_777'
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.statusCode).toBe(202);
+      const [url, options] = mockFetch.mock.calls[0];
+      expect(url).toBe('https://custom-pd-relay.company.com/v2/enqueue');
+      const body = JSON.parse(options.body);
+      expect(body.routing_key).toBe('pd_secret_key_777');
+    });
+
+    it('should return error when routing key is missing', async () => {
+      const notifier = new PagerDutyNotifier();
+      const result = await notifier.send(sampleAlert, 'https://events.pagerduty.com/v2/enqueue', '');
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('routing key is missing');
+    });
+  });
+
+  // =========================================================================
+  // 7. Complete Notifier Registry
+  // =========================================================================
+  describe('7. Default Notifier Registry Expansion', () => {
+    it('should register all 5 supported channel plugins: DISCORD, WEBHOOK, TELEGRAM, SLACK, PAGERDUTY', () => {
+      const registry = createDefaultNotifierRegistry();
+
+      expect(registry.has('DISCORD')).toBe(true);
+      expect(registry.has('WEBHOOK')).toBe(true);
+      expect(registry.has('TELEGRAM')).toBe(true);
+      expect(registry.has('SLACK')).toBe(true);
+      expect(registry.has('PAGERDUTY')).toBe(true);
+
+      expect(registry.get('SLACK')?.type).toBe('SLACK');
+      expect(registry.get('PAGERDUTY')?.type).toBe('PAGERDUTY');
     });
   });
 });

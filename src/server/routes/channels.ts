@@ -5,7 +5,7 @@ import { encrypt, decrypt } from '../../db/encryption.js';
 
 const createChannelSchema = z.object({
   name: z.string().min(1).max(100),
-  type: z.enum(['DISCORD', 'TELEGRAM', 'WEBHOOK']),
+  type: z.enum(['DISCORD', 'TELEGRAM', 'WEBHOOK', 'SLACK', 'PAGERDUTY']),
   destination: z.string().min(1),
   secret: z.string().optional(),
 });
