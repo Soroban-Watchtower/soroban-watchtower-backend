@@ -5,6 +5,7 @@ import { createDefaultNotifierRegistry } from './notifiers/index.js';
 import { createDetectorRunner, DatabaseEventHistoryProvider } from './detectors/index.js';
 import { decrypt } from './db/encryption.js';
 import { ChannelType } from './types/index.js';
+import { getStreamBus } from './server/streaming/streamBus.js';
 import { config } from './config/env.js';
 import { logger } from './observability/logger.js';
 import { shutdownManager } from './observability/shutdown.js';
@@ -40,11 +41,15 @@ export async function bootstrap(): Promise<void> {
   const alertQueue = createAlertQueue();
   const cooldownManager = createCooldownManager();
   const eventHistoryProvider = new DatabaseEventHistoryProvider(prisma);
+  const streamBus = getStreamBus();
 
   const detectorRunner = createDetectorRunner({
     prismaClient: prisma,
     eventHistoryProvider,
     onAlert: async (alertPayload) => {
+      // 0. Push Real-Time Alert to Connected Streaming Clients (SSE)
+      streamBus.publishAlert(alertPayload);
+
       // 1. Sliding Cooldown & Deduplication Gate
       const cooldown = await cooldownManager.shouldDispatch(
         alertPayload.contractId,
@@ -136,6 +141,9 @@ export async function bootstrap(): Promise<void> {
     batchChunkSize: 5,
     onEventsPersisted: async (contractId, events) => {
       for (const event of events) {
+        // Stream live contract event to connected SSE subscribers
+        streamBus.publishEvent(event);
+
         try {
           await detectorRunner.evaluateEvent(event);
         } catch (detectorErr: any) {
@@ -153,7 +161,7 @@ export async function bootstrap(): Promise<void> {
   });
 
   // 5. Initialize Fastify HTTP Read API
-  const server = await buildServer({ enableLogging: true });
+  const server = await buildServer({ enableLogging: true, streamBus });
 
   // 6. Register Ordered Graceful Shutdown Tasks
   // Order 10: Stop Ingestion Poller

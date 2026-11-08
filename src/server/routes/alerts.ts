@@ -1,10 +1,16 @@
 import { FastifyInstance, FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import { prisma } from '../../db/client.js';
+import { requireAuth } from '../auth/apiKeyAuth.js';
 
 export const alertRoutes: FastifyPluginAsync = async (fastify: FastifyInstance) => {
   // Query alerts with pagination and filters
-  fastify.get('/api/v1/alerts', async (request) => {
+  fastify.get(
+    '/api/v1/alerts',
+    {
+      preHandler: [requireAuth({ scopes: ['read:alerts'] })],
+    },
+    async (request) => {
     const query = z
       .object({
         contractId: z.string().optional(),
@@ -57,7 +63,12 @@ export const alertRoutes: FastifyPluginAsync = async (fastify: FastifyInstance) 
   });
 
   // Get single alert by ID
-  fastify.get('/api/v1/alerts/:id', async (request, reply) => {
+  fastify.get(
+    '/api/v1/alerts/:id',
+    {
+      preHandler: [requireAuth({ scopes: ['read:alerts'] })],
+    },
+    async (request, reply) => {
     const { id } = request.params as { id: string };
 
     const alert = await prisma.alert.findUnique({

@@ -185,3 +185,20 @@ model AlertDelivery {
 
   @@index([status, createdAt])
 }
+
+model ApiKey {
+  id          String    @id @default(uuid())
+  name        String
+  keyHash     String    @unique
+  keyPrefix   String    // Safe prefix for UI display (e.g. 'sb_live_a1b2...')
+  roles       String[]  // Scopes: ['read:telemetry', 'read:alerts', 'read:events', 'write:contracts', 'write:rules', 'admin:channels', 'admin:keys', '*']
+  rateLimit   Int       @default(1000)
+  active      Boolean   @default(true)
+  expiresAt   DateTime?
+  lastUsedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([keyHash, active])
+}
+

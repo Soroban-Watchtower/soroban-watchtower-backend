@@ -334,3 +334,23 @@ export const httpRequestDuration = metrics.registerHistogram({
   help: 'Duration of HTTP requests handled by REST API in seconds',
   buckets: [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5],
 });
+
+// Real-Time Streaming Bus Metrics
+export const sseActiveConnections = metrics.registerGauge({
+  name: 'soroban_sse_active_connections',
+  help: 'Total number of active Server-Sent Events (SSE) streaming connections',
+  labelNames: ['stream_type'],
+});
+
+export const sseStreamedMessagesTotal = metrics.registerCounter({
+  name: 'soroban_sse_streamed_messages_total',
+  help: 'Total messages pushed to connected SSE streaming subscribers',
+  labelNames: ['stream_type', 'event_type'],
+});
+
+// Authentication & Gateway Metrics
+export const authFailuresTotal = metrics.registerCounter({
+  name: 'soroban_auth_failures_total',
+  help: 'Total rejected authentication and authorization attempts',
+  labelNames: ['reason'],
+});

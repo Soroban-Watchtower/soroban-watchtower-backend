@@ -2,6 +2,7 @@ import { FastifyInstance, FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import { prisma } from '../../db/client.js';
 import { encrypt, decrypt } from '../../db/encryption.js';
+import { requireAuth } from '../auth/apiKeyAuth.js';
 
 const createChannelSchema = z.object({
   name: z.string().min(1).max(100),
@@ -21,7 +22,12 @@ function maskDestination(dest: string): string {
 
 export const channelRoutes: FastifyPluginAsync = async (fastify: FastifyInstance) => {
   // List notification channels (secrets omitted, destinations masked)
-  fastify.get('/api/v1/channels', async () => {
+  fastify.get(
+    '/api/v1/channels',
+    {
+      preHandler: [requireAuth({ scopes: ['admin:channels'] })],
+    },
+    async () => {
     const channels = await prisma.channel.findMany({
       include: {
         _count: { select: { rules: true, deliveries: true } },
@@ -54,7 +60,12 @@ export const channelRoutes: FastifyPluginAsync = async (fastify: FastifyInstance
   });
 
   // Create new channel (destination and secret encrypted using AES-256-GCM)
-  fastify.post('/api/v1/channels', async (request, reply) => {
+  fastify.post(
+    '/api/v1/channels',
+    {
+      preHandler: [requireAuth({ scopes: ['admin:channels'] })],
+    },
+    async (request, reply) => {
     const body = createChannelSchema.parse(request.body);
 
     const encryptedDestination = encrypt(body.destination);
@@ -82,7 +93,12 @@ export const channelRoutes: FastifyPluginAsync = async (fastify: FastifyInstance
   });
 
   // Delete channel
-  fastify.delete('/api/v1/channels/:id', async (request, reply) => {
+  fastify.delete(
+    '/api/v1/channels/:id',
+    {
+      preHandler: [requireAuth({ scopes: ['admin:channels'] })],
+    },
+    async (request, reply) => {
     const { id } = request.params as { id: string };
     await prisma.channel.delete({ where: { id } });
     return reply.status(204).send();

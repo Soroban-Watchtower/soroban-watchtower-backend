@@ -75,3 +75,43 @@ export interface NotifierPlugin {
   readonly type: ChannelType;
   send(payload: AlertPayload, destination: string, secret?: string): Promise<DeliveryResult>;
 }
+
+// -------------------------------------------------------------
+// Authentication & API Key Gateway
+// -------------------------------------------------------------
+export type ApiKeyScope =
+  | 'read:telemetry'
+  | 'read:alerts'
+  | 'read:events'
+  | 'write:contracts'
+  | 'write:rules'
+  | 'admin:channels'
+  | 'admin:keys'
+  | '*';
+
+export interface ApiKeyIdentity {
+  id: string;
+  name: string;
+  keyPrefix: string;
+  roles: string[];
+  isMaster?: boolean;
+}
+
+// -------------------------------------------------------------
+// Real-Time Streaming Bus
+// -------------------------------------------------------------
+export type StreamEventType = 'alert' | 'contract_event' | 'telemetry' | 'keepalive' | 'connected';
+
+export interface StreamFilter {
+  contractId?: string;
+  severity?: Severity;
+  eventType?: string;
+}
+
+export interface StreamMessage<T = any> {
+  id?: string;
+  event: StreamEventType;
+  data: T;
+  timestamp: string;
+}
+

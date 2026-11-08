@@ -3,12 +3,18 @@ import { z } from 'zod';
 import { prisma } from '../../db/client.js';
 import { createCursorManager } from '../../ingest/cursorManager.js';
 import { summarizeTelemetry, calculateVolumeVelocity, calculateFrequency } from '../../lib/domainMath.js';
+import { requireAuth } from '../auth/apiKeyAuth.js';
 
 export const telemetryRoutes: FastifyPluginAsync = async (fastify: FastifyInstance) => {
   const cursorManager = createCursorManager();
 
   // Get real-time zero-chain-roundtrip telemetry metrics for a contract
-  fastify.get('/api/v1/telemetry/:contractId', async (request, reply) => {
+  fastify.get(
+    '/api/v1/telemetry/:contractId',
+    {
+      preHandler: [requireAuth({ scopes: ['read:telemetry'] })],
+    },
+    async (request, reply) => {
     const { contractId } = request.params as { contractId: string };
     const query = z
       .object({

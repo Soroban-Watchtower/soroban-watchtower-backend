@@ -19,9 +19,15 @@ import { alertRoutes } from './routes/alerts.js';
 import { telemetryRoutes } from './routes/telemetry.js';
 import { failedEventRoutes } from './routes/failedEvents.js';
 import { eventRoutes } from './routes/events.js';
+import { apiKeyRoutes } from './routes/apiKeys.js';
+import { streamRoutes } from './routes/stream.js';
+import { StreamBus, getStreamBus } from './streaming/streamBus.js';
 
 export interface ServerOptions {
   enableLogging?: boolean;
+  enableAuth?: boolean;
+  streamBus?: StreamBus;
+  masterApiKey?: string;
 }
 
 /**
@@ -76,6 +82,8 @@ export async function buildServer(options: ServerOptions = {}): Promise<FastifyI
         { name: 'Telemetry', description: 'Zero-chain-roundtrip contract telemetry & frequency metrics' },
         { name: 'Events', description: 'Historical contract telemetry events and decoded logs' },
         { name: 'FailedEvents', description: 'Dead-letter quarantine inspection and recovery' },
+        { name: 'APIKeys', description: 'API Key management and role-based scope authorization' },
+        { name: 'Streaming', description: 'Real-time Server-Sent Events (SSE) push streaming bus' },
       ],
     },
   });
@@ -136,6 +144,11 @@ export async function buildServer(options: ServerOptions = {}): Promise<FastifyI
   });
 
   // 5. Register Subsystem Routes
+  fastify.decorate('authConfig', {
+    enableAuth: options.enableAuth,
+    masterApiKey: options.masterApiKey,
+  });
+
   await fastify.register(healthRoutes);
   await fastify.register(contractRoutes);
   await fastify.register(ruleRoutes);
@@ -144,6 +157,8 @@ export async function buildServer(options: ServerOptions = {}): Promise<FastifyI
   await fastify.register(telemetryRoutes);
   await fastify.register(eventRoutes);
   await fastify.register(failedEventRoutes);
+  await fastify.register(apiKeyRoutes);
+  await fastify.register(streamRoutes, { streamBus: options.streamBus || getStreamBus() });
 
   return fastify;
 }

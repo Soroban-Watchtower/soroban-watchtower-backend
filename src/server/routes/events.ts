@@ -1,6 +1,7 @@
 import { FastifyInstance, FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import { prisma } from '../../db/client.js';
+import { requireAuth } from '../auth/apiKeyAuth.js';
 
 const eventQuerySchema = z.object({
   contractId: z.string().optional(),
@@ -15,7 +16,12 @@ const eventQuerySchema = z.object({
 
 export const eventRoutes: FastifyPluginAsync = async (fastify: FastifyInstance) => {
   // GET /api/v1/events: Query historical telemetry events with pagination and filters
-  fastify.get('/api/v1/events', async (request) => {
+  fastify.get(
+    '/api/v1/events',
+    {
+      preHandler: [requireAuth({ scopes: ['read:events'] })],
+    },
+    async (request) => {
     const query = eventQuerySchema.parse(request.query);
 
     const where: any = {};
@@ -62,7 +68,12 @@ export const eventRoutes: FastifyPluginAsync = async (fastify: FastifyInstance) 
   });
 
   // GET /api/v1/events/:id: Retrieve single event by ID
-  fastify.get('/api/v1/events/:id', async (request, reply) => {
+  fastify.get(
+    '/api/v1/events/:id',
+    {
+      preHandler: [requireAuth({ scopes: ['read:events'] })],
+    },
+    async (request, reply) => {
     const { id } = request.params as { id: string };
 
     const event = await prisma.event.findUnique({

@@ -1,6 +1,7 @@
 import { FastifyInstance, FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import { prisma } from '../../db/client.js';
+import { requireAuth } from '../auth/apiKeyAuth.js';
 
 const createRuleSchema = z.object({
   contractId: z.string().min(1),
@@ -20,7 +21,12 @@ const createRuleSchema = z.object({
 
 export const ruleRoutes: FastifyPluginAsync = async (fastify: FastifyInstance) => {
   // List rules
-  fastify.get('/api/v1/rules', async (request) => {
+  fastify.get(
+    '/api/v1/rules',
+    {
+      preHandler: [requireAuth({ scopes: ['read:telemetry'] })],
+    },
+    async (request) => {
     const query = request.query as { contractId?: string };
     const rules = await prisma.rule.findMany({
       where: query.contractId ? { contractId: query.contractId } : undefined,
@@ -35,7 +41,12 @@ export const ruleRoutes: FastifyPluginAsync = async (fastify: FastifyInstance) =
   });
 
   // Create rule
-  fastify.post('/api/v1/rules', async (request, reply) => {
+  fastify.post(
+    '/api/v1/rules',
+    {
+      preHandler: [requireAuth({ scopes: ['write:rules'] })],
+    },
+    async (request, reply) => {
     const body = createRuleSchema.parse(request.body);
 
     const rule = await prisma.rule.create({
@@ -63,7 +74,12 @@ export const ruleRoutes: FastifyPluginAsync = async (fastify: FastifyInstance) =
   });
 
   // Update rule
-  fastify.patch('/api/v1/rules/:id', async (request) => {
+  fastify.patch(
+    '/api/v1/rules/:id',
+    {
+      preHandler: [requireAuth({ scopes: ['write:rules'] })],
+    },
+    async (request) => {
     const { id } = request.params as { id: string };
     const body = z
       .object({
@@ -83,7 +99,12 @@ export const ruleRoutes: FastifyPluginAsync = async (fastify: FastifyInstance) =
   });
 
   // Delete rule
-  fastify.delete('/api/v1/rules/:id', async (request, reply) => {
+  fastify.delete(
+    '/api/v1/rules/:id',
+    {
+      preHandler: [requireAuth({ scopes: ['write:rules'] })],
+    },
+    async (request, reply) => {
     const { id } = request.params as { id: string };
     await prisma.rule.delete({ where: { id } });
     return reply.status(204).send();

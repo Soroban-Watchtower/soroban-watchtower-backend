@@ -4,13 +4,19 @@ import { prisma } from '../../db/client.js';
 import { createFailedEventManager } from '../../ingest/failedEventManager.js';
 import { decodeSorobanEvent } from '../../decoder/eventDecoder.js';
 import { createCursorManager } from '../../ingest/cursorManager.js';
+import { requireAuth } from '../auth/apiKeyAuth.js';
 
 export const failedEventRoutes: FastifyPluginAsync = async (fastify: FastifyInstance) => {
   const failedManager = createFailedEventManager();
   const cursorManager = createCursorManager();
 
   // List dead-letter failed events
-  fastify.get('/api/v1/failed-events', async (request) => {
+  fastify.get(
+    '/api/v1/failed-events',
+    {
+      preHandler: [requireAuth({ scopes: ['write:contracts'] })],
+    },
+    async (request) => {
     const query = z
       .object({
         status: z.enum(['PENDING', 'RESOLVED', 'DISCARDED']).optional(),
@@ -47,7 +53,12 @@ export const failedEventRoutes: FastifyPluginAsync = async (fastify: FastifyInst
   });
 
   // Replay a specific failed event
-  fastify.post('/api/v1/failed-events/:id/replay', async (request, reply) => {
+  fastify.post(
+    '/api/v1/failed-events/:id/replay',
+    {
+      preHandler: [requireAuth({ scopes: ['write:contracts'] })],
+    },
+    async (request, reply) => {
     const { id } = request.params as { id: string };
 
     const item = await prisma.failedEvent.findUnique({ where: { id } });
@@ -82,7 +93,12 @@ export const failedEventRoutes: FastifyPluginAsync = async (fastify: FastifyInst
   });
 
   // Discard a failed event
-  fastify.post('/api/v1/failed-events/:id/discard', async (request, reply) => {
+  fastify.post(
+    '/api/v1/failed-events/:id/discard',
+    {
+      preHandler: [requireAuth({ scopes: ['write:contracts'] })],
+    },
+    async (request, reply) => {
     const { id } = request.params as { id: string };
     const discarded = await failedManager.markDiscarded(id);
     return reply.status(200).send({ status: 'discarded', data: discarded });

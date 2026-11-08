@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { prisma } from '../../db/client.js';
 import { createCursorManager } from '../../ingest/cursorManager.js';
 import { contractEvents } from '../../ingest/contractEvents.js';
+import { requireAuth } from '../auth/apiKeyAuth.js';
 
 const registerContractSchema = z.object({
   id: z.string().min(56).max(56).regex(/^C[A-Z0-9]{55}$/, 'Must be a valid Soroban contract address starting with C'),
@@ -15,7 +16,12 @@ export const contractRoutes: FastifyPluginAsync = async (fastify: FastifyInstanc
   const cursorManager = createCursorManager();
 
   // List all registered contracts
-  fastify.get('/api/v1/contracts', async () => {
+  fastify.get(
+    '/api/v1/contracts',
+    {
+      preHandler: [requireAuth({ scopes: ['read:telemetry'] })],
+    },
+    async () => {
     const contracts = await prisma.contract.findMany({
       include: {
         ingestionStates: true,
@@ -50,7 +56,12 @@ export const contractRoutes: FastifyPluginAsync = async (fastify: FastifyInstanc
   });
 
   // Register a new contract
-  fastify.post('/api/v1/contracts', async (request, reply) => {
+  fastify.post(
+    '/api/v1/contracts',
+    {
+      preHandler: [requireAuth({ scopes: ['write:contracts'] })],
+    },
+    async (request, reply) => {
     const body = registerContractSchema.parse(request.body);
 
     const contract = await prisma.contract.create({
@@ -73,7 +84,12 @@ export const contractRoutes: FastifyPluginAsync = async (fastify: FastifyInstanc
   });
 
   // Get single contract details
-  fastify.get('/api/v1/contracts/:id', async (request, reply) => {
+  fastify.get(
+    '/api/v1/contracts/:id',
+    {
+      preHandler: [requireAuth({ scopes: ['read:telemetry'] })],
+    },
+    async (request, reply) => {
     const { id } = request.params as { id: string };
     const contract = await prisma.contract.findUnique({
       where: { id },
@@ -106,7 +122,12 @@ export const contractRoutes: FastifyPluginAsync = async (fastify: FastifyInstanc
   });
 
   // Update contract status or name
-  fastify.patch('/api/v1/contracts/:id', async (request) => {
+  fastify.patch(
+    '/api/v1/contracts/:id',
+    {
+      preHandler: [requireAuth({ scopes: ['write:contracts'] })],
+    },
+    async (request) => {
     const { id } = request.params as { id: string };
     const body = z
       .object({
@@ -130,7 +151,12 @@ export const contractRoutes: FastifyPluginAsync = async (fastify: FastifyInstanc
   });
 
   // Delete contract
-  fastify.delete('/api/v1/contracts/:id', async (request, reply) => {
+  fastify.delete(
+    '/api/v1/contracts/:id',
+    {
+      preHandler: [requireAuth({ scopes: ['write:contracts'] })],
+    },
+    async (request, reply) => {
     const { id } = request.params as { id: string };
     await prisma.contract.delete({ where: { id } });
     contractEvents.emitContractDeleted(id);

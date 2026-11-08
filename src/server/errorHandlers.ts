@@ -125,9 +125,27 @@ export function handleFastifyError(
     `[ErrorHandler] Unhandled error: ${error.message}`
   );
 
+  const errorType =
+    statusCode === 401
+      ? 'https://soroban-watchdog.io/errors/unauthorized'
+      : statusCode === 403
+      ? 'https://soroban-watchdog.io/errors/forbidden'
+      : statusCode === 404
+      ? 'https://soroban-watchdog.io/errors/resource-not-found'
+      : 'https://soroban-watchdog.io/errors/internal-server-error';
+
+  const errorTitle =
+    statusCode === 401
+      ? 'Unauthorized'
+      : statusCode === 403
+      ? 'Forbidden'
+      : statusCode === 404
+      ? 'Not Found'
+      : 'Internal Server Error';
+
   const response: ProblemDetails = {
-    type: 'https://soroban-watchdog.io/errors/internal-server-error',
-    title: statusCode === 404 ? 'Not Found' : 'Internal Server Error',
+    type: errorType,
+    title: errorTitle,
     status: statusCode,
     detail: statusCode === 500 ? 'An unexpected server error occurred.' : error.message,
     instance,
