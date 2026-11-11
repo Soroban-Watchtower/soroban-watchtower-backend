@@ -6,6 +6,7 @@ import { createDetectorRunner, DatabaseEventHistoryProvider } from './detectors/
 import { decrypt } from './db/encryption.js';
 import { ChannelType } from './types/index.js';
 import { getStreamBus } from './server/streaming/streamBus.js';
+import { getIncidentResponder } from './defender/incidentResponder.js';
 import { config } from './config/env.js';
 import { logger } from './observability/logger.js';
 import { shutdownManager } from './observability/shutdown.js';
@@ -42,6 +43,7 @@ export async function bootstrap(): Promise<void> {
   const cooldownManager = createCooldownManager();
   const eventHistoryProvider = new DatabaseEventHistoryProvider(prisma);
   const streamBus = getStreamBus();
+  const incidentResponder = getIncidentResponder();
 
   const detectorRunner = createDetectorRunner({
     prismaClient: prisma,
@@ -49,6 +51,36 @@ export async function bootstrap(): Promise<void> {
     onAlert: async (alertPayload) => {
       // 0. Push Real-Time Alert to Connected Streaming Clients (SSE)
       streamBus.publishAlert(alertPayload);
+
+      // 0.1 Check for Automated On-Chain Defensive Action Policy
+      try {
+        const triggeredRule = await prisma.rule.findUnique({
+          where: { id: alertPayload.ruleId },
+          select: { actionPolicy: true },
+        });
+
+        const policy = triggeredRule?.actionPolicy as any;
+        if (policy && policy.enabled) {
+          logger.warn(
+            { alertId: alertPayload.alertId, ruleId: alertPayload.ruleId, policy },
+            '⚡ [Defender] Triggering automated on-chain incident response circuit-breaker!'
+          );
+
+          incidentResponder
+            .executeDefensiveAction(alertPayload, policy)
+            .then((res) => {
+              logger.info(
+                { executionId: res.executionId, status: res.status, txHash: res.txHash },
+                '🛡️ [Defender] Defensive action executed'
+              );
+            })
+            .catch((err) => {
+              logger.error({ err }, '❌ [Defender] Error during defensive action execution:');
+            });
+        }
+      } catch (err: any) {
+        logger.error({ err }, '[Defender] Error resolving rule action policy:');
+      }
 
       // 1. Sliding Cooldown & Deduplication Gate
       const cooldown = await cooldownManager.shouldDispatch(

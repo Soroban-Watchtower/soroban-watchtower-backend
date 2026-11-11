@@ -100,7 +100,7 @@ export interface ApiKeyIdentity {
 // -------------------------------------------------------------
 // Real-Time Streaming Bus
 // -------------------------------------------------------------
-export type StreamEventType = 'alert' | 'contract_event' | 'telemetry' | 'keepalive' | 'connected';
+export type StreamEventType = 'alert' | 'contract_event' | 'telemetry' | 'defensive_action' | 'keepalive' | 'connected';
 
 export interface StreamFilter {
   contractId?: string;
@@ -114,4 +114,30 @@ export interface StreamMessage<T = any> {
   data: T;
   timestamp: string;
 }
+
+// -------------------------------------------------------------
+// Automated On-Chain Incident Response & Defense
+// -------------------------------------------------------------
+export type ActionStatus = 'PENDING' | 'SIMULATED' | 'SUBMITTED' | 'CONFIRMED' | 'FAILED';
+
+export interface ResponseActionPolicy {
+  enabled: boolean;
+  actionType: 'INVOKE_CONTRACT';
+  targetContractId?: string; // Target contract (defaults to alert's contractId)
+  functionName: string; // e.g. 'pause', 'freeze', 'emergency_stop'
+  args?: any[]; // Soroban function arguments
+  maxResourceFee?: string; // Max gas/resource fee in stroops (e.g. '5000000')
+  simulationOnly?: boolean; // Dry-run verification mode (no network broadcast)
+}
+
+export interface ActionExecutionResult {
+  executionId: string;
+  status: ActionStatus;
+  txHash?: string;
+  ledgerSequence?: bigint;
+  simulatedFee?: string;
+  error?: string;
+  executionTimeMs: number;
+}
+
 

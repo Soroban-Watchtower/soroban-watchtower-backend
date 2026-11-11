@@ -21,6 +21,7 @@ import { failedEventRoutes } from './routes/failedEvents.js';
 import { eventRoutes } from './routes/events.js';
 import { apiKeyRoutes } from './routes/apiKeys.js';
 import { streamRoutes } from './routes/stream.js';
+import { defenderRoutes } from './routes/defender.js';
 import { StreamBus, getStreamBus } from './streaming/streamBus.js';
 
 export interface ServerOptions {
@@ -84,6 +85,7 @@ export async function buildServer(options: ServerOptions = {}): Promise<FastifyI
         { name: 'FailedEvents', description: 'Dead-letter quarantine inspection and recovery' },
         { name: 'APIKeys', description: 'API Key management and role-based scope authorization' },
         { name: 'Streaming', description: 'Real-time Server-Sent Events (SSE) push streaming bus' },
+        { name: 'Defender', description: 'Autonomous on-chain incident response and circuit-breaker defense' },
       ],
     },
   });
@@ -159,6 +161,7 @@ export async function buildServer(options: ServerOptions = {}): Promise<FastifyI
   await fastify.register(failedEventRoutes);
   await fastify.register(apiKeyRoutes);
   await fastify.register(streamRoutes, { streamBus: options.streamBus || getStreamBus() });
+  await fastify.register(defenderRoutes);
 
   return fastify;
 }

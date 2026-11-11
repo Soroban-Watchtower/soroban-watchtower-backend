@@ -36,6 +36,14 @@ enum DeliveryStatus {
   FAILED
 }
 
+enum ActionStatus {
+  PENDING
+  SIMULATED
+  SUBMITTED
+  CONFIRMED
+  FAILED
+}
+
 enum FailedEventStatus {
   PENDING
   RESOLVED
@@ -110,19 +118,21 @@ model Event {
 }
 
 model Rule {
-  id           String        @id @default(uuid())
-  contractId   String
-  name         String
-  detectorType String        // e.g., 'LARGE_VALUE_TRANSFER', 'RAPID_DRAIN', 'EMERGENCY_PAUSE'
-  severity     Severity      @default(MEDIUM)
-  parameters   Json          // { "threshold": "10000000000", "windowMinutes": 5 }
-  enabled      Boolean       @default(true)
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  id               String            @id @default(uuid())
+  contractId       String
+  name             String
+  detectorType     String            // e.g., 'LARGE_VALUE_TRANSFER', 'RAPID_DRAIN', 'EMERGENCY_PAUSE'
+  severity         Severity          @default(MEDIUM)
+  parameters       Json              // { "threshold": "10000000000", "windowMinutes": 5 }
+  actionPolicy     Json?             // { "enabled": true, "actionType": "INVOKE_CONTRACT", "functionName": "pause", "maxResourceFee": "5000000" }
+  enabled          Boolean           @default(true)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
 
-  contract     Contract      @relation(fields: [contractId], references: [id], onDelete: Cascade)
-  channels     RuleChannel[]
-  alerts       Alert[]
+  contract         Contract          @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  channels         RuleChannel[]
+  alerts           Alert[]
+  actionExecutions ActionExecution[]
 
   @@index([contractId, enabled])
 }
@@ -163,8 +173,9 @@ model Alert {
 
   rule       Rule            @relation(fields: [ruleId], references: [id], onDelete: Cascade)
   contract   Contract        @relation(fields: [contractId], references: [id], onDelete: Cascade)
-  event      Event?          @relation(fields: [eventId], references: [id], onDelete: SetNull)
-  deliveries AlertDelivery[]
+  event            Event?            @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  deliveries       AlertDelivery[]
+  actionExecutions ActionExecution[]
 
   @@index([contractId, createdAt(sort: Desc)])
   @@index([ruleId])
@@ -184,6 +195,29 @@ model AlertDelivery {
   channel   Channel        @relation(fields: [channelId], references: [id], onDelete: Cascade)
 
   @@index([status, createdAt])
+}
+
+model ActionExecution {
+  id              String       @id @default(uuid())
+  ruleId          String
+  alertId         String?
+  contractId      String
+  actionType      String       // e.g. 'INVOKE_CONTRACT'
+  functionName    String       // e.g. 'pause', 'emergency_stop'
+  txHash          String?
+  status          ActionStatus @default(PENDING)
+  simulatedFee    String?
+  ledgerSequence  BigInt?
+  errorLog        String?      @db.Text
+  executionTimeMs Int?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  rule            Rule         @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  alert           Alert?       @relation(fields: [alertId], references: [id], onDelete: SetNull)
+
+  @@index([contractId, status])
+  @@index([ruleId, createdAt])
 }
 
 model ApiKey {

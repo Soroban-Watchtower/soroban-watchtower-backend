@@ -37,6 +37,12 @@ const mockPrisma = vi.hoisted(() => ({
     update: vi.fn(),
     delete: vi.fn(),
   },
+  actionExecution: {
+    findMany: vi.fn().mockResolvedValue([]),
+    create: vi.fn(),
+    count: vi.fn().mockResolvedValue(0),
+    update: vi.fn(),
+  },
   ingestionState: {
     findUnique: vi.fn().mockResolvedValue(null),
   },

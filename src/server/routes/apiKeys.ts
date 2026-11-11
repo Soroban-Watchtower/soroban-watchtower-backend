@@ -104,3 +104,4 @@ export async function apiKeyRoutes(fastify: FastifyInstance): Promise<void> {
     }
   );
 }
+

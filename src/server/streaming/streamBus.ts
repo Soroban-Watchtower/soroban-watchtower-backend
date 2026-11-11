@@ -60,6 +60,14 @@ export class StreamBus {
   }
 
   /**
+   * Broadcasts an automated defensive action (circuit-breaker / pause invocation).
+   */
+  publishDefensiveAction(action: Record<string, any>): void {
+    sseStreamedMessagesTotal.inc({ stream_type: 'defensive_action', event_type: action.status || 'unknown' });
+    this.emitter.emit('defensive_action', action);
+  }
+
+  /**
    * Subscribes a client to real-time security alerts with optional filtering.
    */
   subscribeAlerts(
@@ -180,3 +188,4 @@ export function getStreamBus(): StreamBus {
   }
   return defaultStreamBus;
 }
+

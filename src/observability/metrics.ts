@@ -354,3 +354,17 @@ export const authFailuresTotal = metrics.registerCounter({
   help: 'Total rejected authentication and authorization attempts',
   labelNames: ['reason'],
 });
+
+// Automated Incident Response & Defensive Execution Metrics
+export const defensiveActionsTotal = metrics.registerCounter({
+  name: 'soroban_defensive_actions_total',
+  help: 'Total automated defensive on-chain actions triggered by security alerts',
+  labelNames: ['action_type', 'function_name', 'status'],
+});
+
+export const defensiveActionDuration = metrics.registerHistogram({
+  name: 'soroban_defensive_action_duration_seconds',
+  help: 'Latency of on-chain defensive incident response from trigger to confirmation',
+  buckets: [0.1, 0.25, 0.5, 1, 2.5, 5, 10, 15, 30],
+  labelNames: ['action_type', 'function_name'],
+});
