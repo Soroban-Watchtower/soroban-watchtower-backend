@@ -1,5 +1,5 @@
 {
-  "name": "soroban-watchdog-backend",
+  "name": "soroban-watchtower-backend",
   "version": "0.1.0",
   "description": "Telemetry, anomaly surveillance, and exploit-alerting engine for Stellar Soroban smart contracts",
   "main": "dist/server/index.js",
